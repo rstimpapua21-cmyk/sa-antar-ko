@@ -1138,7 +1138,13 @@
         async function fetchData() {
             // PRIORITY 1: Use embedded data (most reliable, no CORS issues)
             if (typeof EMBEDDED_DATA !== 'undefined' && EMBEDDED_DATA.length > 0) {
-                allData = [...EMBEDDED_DATA];
+                allData = EMBEDDED_DATA.map(record => {
+                    const trimmed = {};
+                    for (const key in record) {
+                        trimmed[key.trim()] = record[key];
+                    }
+                    return trimmed;
+                });
                 filteredData = [...allData];
                 console.log(`✓ Using ${allData.length} embedded records`);
                 return;

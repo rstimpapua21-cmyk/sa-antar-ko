@@ -18,7 +18,7 @@ def main():
     try:
         with open('data.csv', 'r', encoding='utf-8') as f:
             reader = csv.DictReader(f)
-            data = list(reader)
+            data = [{k.strip(): v for k, v in row.items()} for row in reader]
         print(f"✓ {len(data)} records berhasil dibaca")
     except Exception as e:
         print(f"✗ Error membaca CSV: {e}")
