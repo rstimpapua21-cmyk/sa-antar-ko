@@ -1000,15 +1000,15 @@
             </div>
         </div>
 
-        <!-- Data Table -->
-        <div class="table-card animate-in delay-5">
+        <!-- Data Table (Protected) -->
+        <div class="table-card animate-in delay-5" id="tableCard">
             <div class="table-header">
                 <div class="table-title">
-                    <i class="fas fa-table"></i>
+                    <i class="fas fa-lock"></i>
                     Data Pasien Pulang
                     <span class="chart-badge" id="tableCount">0 data</span>
                 </div>
-                <div class="table-actions">
+                <div class="table-actions" id="tableActions" style="display:none;">
                     <button class="table-btn" onclick="exportCSV()">
                         <i class="fas fa-download"></i>
                         Export CSV
@@ -1019,7 +1019,7 @@
                     </button>
                 </div>
             </div>
-            <div class="table-wrapper">
+            <div class="table-wrapper" id="tableWrapper" style="display:none;">
                 <table id="dataTable">
                     <thead>
                         <tr>
@@ -1041,6 +1041,23 @@
                     <tbody id="tableBody">
                     </tbody>
                 </table>
+            </div>
+            <!-- Lock Overlay -->
+            <div id="lockOverlay" style="padding: 40px; text-align: center;">
+                <div style="font-size: 48px; color: #fbbc04; margin-bottom: 15px;">
+                    <i class="fas fa-shield-haltered"></i>
+                </div>
+                <h3 style="margin-bottom: 8px; color: #f1f5f9;">Data Terkunci</h3>
+                <p style="color: #94a3b8; margin-bottom: 20px; font-size: 0.9rem;">Masukkan password untuk mengakses data pasien</p>
+                <div style="display: flex; gap: 10px; justify-content: center; align-items: center;">
+                    <input type="password" id="tablePassword" placeholder="Masukkan password..." 
+                           style="background: #0f172a; border: 1px solid #334155; color: #f1f5f9; padding: 10px 16px; border-radius: 8px; font-size: 0.9rem; width: 250px; outline: none;"
+                           onkeydown="if(event.key==='Enter') unlockTable()">
+                    <button onclick="unlockTable()" style="background: #1a73e8; border: none; color: white; padding: 10px 20px; border-radius: 8px; cursor: pointer; font-size: 0.9rem; font-weight: 600;">
+                        <i class="fas fa-unlock"></i> Buka
+                    </button>
+                </div>
+                <p id="lockError" style="color: #ea4335; margin-top: 10px; font-size: 0.8rem; display: none;">Password salah!</p>
             </div>
         </div>
     </div>
@@ -2290,6 +2307,49 @@
             document.getElementById('periodFilter').value = '';
             applyFilters();
             showNotification('Semua filter telah direset');
+        }
+
+        // === Table Lock/Unlock ===
+        const TABLE_PASSWORD_HASH = 'a0b1c2d3e4f5a6b7c8d9e0f1a2b3c4d5e6f7a8b9c0d1e2f3a4b5c6d7e8f9f0a1';
+
+        async function unlockTable() {
+            const password = document.getElementById('tablePassword').value;
+            const errorEl = document.getElementById('lockError');
+            
+            if (!password) {
+                errorEl.textContent = 'Masukkan password!';
+                errorEl.style.display = 'block';
+                return;
+            }
+            
+            // Hash the input password using SHA-256
+            const encoder = new TextEncoder();
+            const data = encoder.encode(password);
+            const hashBuffer = await crypto.subtle.digest('SHA-256', data);
+            const hashArray = Array.from(new Uint8Array(hashBuffer));
+            const hashHex = hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+            
+            // Check against stored hash
+            // Default password: "antarko2025"
+            const validHashes = [
+                'ddc661b208a58b51e4785e12ee31602f47b999bc7d23cbee92084656dea75815', // antarko2025
+            ];
+            
+            if (validHashes.includes(hashHex)) {
+                // Unlock!
+                document.getElementById('lockOverlay').style.display = 'none';
+                document.getElementById('tableWrapper').style.display = 'block';
+                document.getElementById('tableActions').style.display = 'flex';
+                document.getElementById('tablePassword').value = '';
+                errorEl.style.display = 'none';
+                updateTable();
+                showNotification('Data pasien berhasil dibuka!');
+            } else {
+                errorEl.textContent = 'Password salah!';
+                errorEl.style.display = 'block';
+                document.getElementById('tablePassword').value = '';
+                document.getElementById('tablePassword').focus();
+            }
         }
 
         function updateTable() {
