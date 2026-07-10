@@ -60,10 +60,15 @@ def update_html(data):
             print(f"✗ End marker '{end_marker}' tidak ditemukan di HTML")
             return False
         
-        # Replace data
+        # Replace data - strip outer brackets from JSON since start/end markers provide them
+        # data_json is like [{"...": "..."}, ...] — strip first [ and last ]
+        if data_json.startswith('[') and data_json.endswith(']'):
+            inner_data = data_json[1:-1]
+        else:
+            inner_data = data_json
         new_html = (
             html_content[:start_idx + len(start_marker)] +
-            '\n' + data_json + '\n' +
+            '\n' + inner_data + '\n' +
             html_content[end_idx:]
         )
         

@@ -1,0 +1,68 @@
+name: 🔄 Auto Sync Dashboard Data
+
+on:
+  schedule:
+    - cron: '0 */2 * * *'  # Every 2 hours
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - 'sync_data.py'
+      - '.github/workflows/auto-sync.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  sync-data:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: 📥 Checkout Repository
+        uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          fetch-depth: 0
+
+      - name: 🐍 Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: 📦 Install Dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install requests
+
+      - name: 🔄 Sync Data dari Google Sheets
+        id: sync
+        run: |
+          echo "🚀 Memulai sync data..."
+          python sync_data.py
+
+          if git diff --quiet sa_ntarko.html; then
+            echo "changed=false" >> $GITHUB_OUTPUT
+            echo "📊 Tidak ada perubahan data"
+          else
+            echo "changed=true" >> $GITHUB_OUTPUT
+            echo "✅ Data berhasil diupdate"
+          fi
+
+      - name: 💾 Commit dan Push Perubahan
+        if: steps.sync.outputs.changed == 'true'
+        run: |
+          git config --local user.email "action@github.com"
+          git config --local user.name "GitHub Action"
+          git add sa_ntarko.html
+          TIMESTAMP=$(TZ='Asia/Jayapura' date '+%Y-%m-%d %H:%M:%S WIT')
+          git commit -m "🔄 Auto-sync data: $TIMESTAMP"
+          git push origin main
+
+      - name: 📊 Report Status
+        if: always()
+        run: |
+          echo "========================================"
+          echo "Sync completed at: $(TZ='Asia/Jayapura' date '+%Y-%m-%d %H:%M:%S WIT')"
+          echo "Changed: ${{ steps.sync.outputs.changed }}"
+          echo "========================================"
