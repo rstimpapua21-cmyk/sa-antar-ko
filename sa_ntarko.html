@@ -3,10 +3,11 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net https://cdnjs.cloudflare.com; style-src 'self' 'unsafe-inline' https://cdnjs.cloudflare.com; img-src 'self' data: https:; connect-src 'self' https://docs.google.com; font-src https://cdnjs.cloudflare.com;">
     <title>Dashboard Sa Antar Ko - Sistem Monitoring Pasien Pulang</title>
-    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels@2.2.0/dist/chartjs-plugin-datalabels.min.js"></script>
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js" integrity="sha384-e6nUZLBkQ86NJ6TVVKAeSaK8jWa3NhkYWZFomE39AvDbQWeie9PlQqM3pmYW5d1g" crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels@2.2.0/dist/chartjs-plugin-datalabels.min.js" integrity="sha384-y49Zu59jZHJL/PLKgZPv3k2WI9c0Yp3pWB76V8OBVCb0QBKS8l4Ff3YslzHVX76Y" crossorigin="anonymous"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" integrity="sha384-iw3OoTErCYJJB9mCa8LNS2hbsQ7M3C0EpIsO/H5+EGAkPGc6rk+V8i04oW/K5xq0" crossorigin="anonymous">
     <style>
         :root {
             --primary: #1a73e8;
@@ -31191,175 +31192,9 @@
             } catch (error) {
                 console.warn('Direct fetch failed:', error.message);
             }
-            
-            // PRIORITY 3: Try CORS proxies
-            const proxyUrls = [
-                `https://api.allorigins.win/raw?url=${encodeURIComponent(csvUrl)}`,
-                `https://corsproxy.io/?${encodeURIComponent(csvUrl)}`
-            ];
-            
-            for (let i = 0; i < proxyUrls.length; i++) {
-                try {
-                    const response = await fetch(proxyUrls[i]);
-                    if (response.ok) {
-                        const csvText = await response.text();
-                        if (csvText.length > 100 && csvText.includes(',')) {
-                            allData = parseCSV(csvText);
-                            filteredData = [...allData];
-                            console.log(`✓ Fetched ${allData.length} records via proxy ${i + 1}`);
-                            return;
-                        }
-                    }
-                } catch (error) {
-                    console.warn(`Proxy ${i + 1} failed:`, error.message);
-                }
-            }
-            
+
             // All methods failed
-            throw new Error('Tidak ada data yang tersedia. Jalankan sync_dashboard.bat untuk update data.');
-        }
-        
-        // JSONP method to bypass CORS
-        function fetchViaJSONP() {
-            return new Promise((resolve, reject) => {
-                const callbackName = 'googleSheetCallback_' + Date.now();
-                const timeout = setTimeout(() => {
-                    cleanup();
-                    reject(new Error('JSONP timeout'));
-                }, 15000);
-                
-                function cleanup() {
-                    clearTimeout(timeout);
-                    delete window[callbackName];
-                    const script = document.getElementById('google-sheet-script');
-                    if (script) script.remove();
-                }
-                
-                window[callbackName] = function(data) {
-                    try {
-                        if (data && data.table) {
-                            allData = convertGoogleVizData(data.table);
-                            filteredData = [...allData];
-                            console.log(`✓ Fetched ${allData.length} records via JSONP`);
-                            cleanup();
-                            resolve();
-                        } else {
-                            cleanup();
-                            reject(new Error('Invalid JSONP data structure'));
-                        }
-                    } catch (e) {
-                        cleanup();
-                        reject(e);
-                    }
-                };
-                
-                const script = document.createElement('script');
-                script.id = 'google-sheet-script';
-                script.src = `https://docs.google.com/spreadsheets/d/e/2PACX-1vSv31iXfAkwY8c6Tsi9MvvT1ABR8hxQlI-3rmTCYC9z98D4NklxzocQD2o5AmBvjE25qxYMsQTY36qE/gviz/tq?tqx=responseHandler:${callbackName}&gid=965791667`;
-                script.onerror = () => {
-                    cleanup();
-                    reject(new Error('JSONP script load error'));
-                };
-                document.head.appendChild(script);
-            });
-        }
-        
-        // Convert Google Visualization API data to our format
-        function convertGoogleVizData(table) {
-            const headers = table.cols.map(col => col.label || col.id);
-            const data = [];
-            
-            for (let i = 0; i < table.rows.length; i++) {
-                const row = table.rows[i];
-                if (!row.c) continue;
-                
-                const record = {};
-                let hasData = false;
-                
-                for (let j = 0; j < headers.length; j++) {
-                    const cell = row.c[j];
-                    let value = '';
-                    
-                    if (cell) {
-                        if (cell.f !== undefined) {
-                            value = cell.f; // Formatted value
-                        } else if (cell.v !== undefined) {
-                            value = String(cell.v);
-                        }
-                    }
-                    
-                    record[headers[j].trim()] = value.trim();
-                    if (value.trim()) hasData = true;
-                }
-                
-                if (hasData) {
-                    data.push(record);
-                }
-            }
-            
-            return data;
-        }
-        
-        // Fallback: Fetch published HTML and parse table
-        async function fetchViaPublishedHTML() {
-            const pubUrl = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vSv31iXfAkwY8c6Tsi9MvvT1ABR8hxQlI-3rmTCYC9z98D4NklxzocQD2o5AmBvjE25qxYMsQTY36qE/pubhtml?gid=965791667&single=true';
-            
-            const response = await fetch(pubUrl);
-            if (!response.ok) {
-                throw new Error(`HTTP error! status: ${response.status}`);
-            }
-            
-            const html = await response.text();
-            allData = parseHTMLTable(html);
-            filteredData = [...allData];
-            console.log(`✓ Fetched ${allData.length} records via HTML parsing`);
-        }
-        
-        // Parse HTML table from published Google Sheets
-        function parseHTMLTable(html) {
-            const parser = new DOMParser();
-            const doc = parser.parseFromString(html, 'text/html');
-            const tables = doc.querySelectorAll('table');
-            
-            if (tables.length === 0) {
-                throw new Error('No tables found in HTML');
-            }
-            
-            const table = tables[0];
-            const rows = table.querySelectorAll('tr');
-            
-            if (rows.length < 2) return [];
-            
-            // Get headers
-            const headerRow = rows[0];
-            const headers = [];
-            headerRow.querySelectorAll('th, td').forEach(cell => {
-                headers.push(cell.textContent.trim());
-            });
-            
-            // Get data rows
-            const data = [];
-            for (let i = 1; i < rows.length; i++) {
-                const cells = rows[i].querySelectorAll('td');
-                if (cells.length === 0) continue;
-                
-                const record = {};
-                let hasData = false;
-                
-                cells.forEach((cell, index) => {
-                    if (index < headers.length) {
-                        const value = cell.textContent.trim();
-                        record[headers[index]] = value;
-                        if (value) hasData = true;
-                    }
-                });
-                
-                if (hasData) {
-                    data.push(record);
-                }
-            }
-            
-            return data;
+            throw new Error('Tidak ada data yang tersedia. Jalankan sync_data.py untuk update data.');
         }
 
         function parseCSV(csvText) {
@@ -32295,7 +32130,7 @@
                     const tag = document.createElement('div');
                     tag.className = 'active-filter-tag';
                     tag.innerHTML = `
-                        <strong>${filter.label}:</strong> ${value}
+                        <strong>${filter.label}:</strong> ${escapeHtml(value)}
                         <span class="remove-tag" onclick="clearFilter('${filter.id}')">
                             <i class="fas fa-times"></i>
                         </span>
@@ -32345,24 +32180,13 @@
         const LOCKOUT_DURATION = 300000; // 5 menit
         const SESSION_TIMEOUT = 300000; // 5 menit inactivity
 
-        // Hash password yang valid (SHA-256)
         const VALID_PASSWORD_HASHES = [
-            'd65abdf91f755558ee2ec4f9abe9fc6968116b32e3dc89e3c660a863574563c1', // @antarko.2025
+            'd65abdf91f755558ee2ec4f9abe9fc6968116b32e3dc89e3c660a863574563c1',
         ];
 
-        // Obfuscated hash verification - split hash to prevent simple string search
         function verifyPasswordHash(inputHash) {
-            const hashSegment = inputHash.substring(10, 74);
-            // Compare against stored hash segment by segment
             for (const storedHash of VALID_PASSWORD_HASHES) {
-                let match = true;
-                for (let i = 0; i < 64; i += 8) {
-                    if (storedHash.substring(i, i + 8) !== inputHash.substring(i, i + 8)) {
-                        match = false;
-                        break;
-                    }
-                }
-                if (match) return true;
+                if (storedHash === inputHash) return true;
             }
             return false;
         }
@@ -32498,19 +32322,19 @@
                 row.innerHTML = `
                     <td>${index + 1}</td>
                     <td>${record['HARI / TANGGAL'] || formatDate(record['Timestamp']) || '-'}</td>
-                    <td><strong>${record['NAMA PASIEN'] || '-'}</strong></td>
-                    <td>${record['SUKU'] || '-'}</td>
-                    <td>${record['NO RM'] || '-'}</td>
-                    <td><span class="room-badge ${roomClass}">${room}</span></td>
-                    <td title="${record['ALAMAT PASIEN'] || ''}">${truncate(record['ALAMAT PASIEN'], 30) || '-'}</td>
+                    <td><strong>${escapeHtml(record['NAMA PASIEN'] || '-')}</strong></td>
+                    <td>${escapeHtml(record['SUKU'] || '-')}</td>
+                    <td>${escapeHtml(record['NO RM'] || '-')}</td>
+                    <td><span class="room-badge ${roomClass}">${escapeHtml(room)}</span></td>
+                    <td title="${escapeHtml(record['ALAMAT PASIEN'] || '')}">${escapeHtml(truncate(record['ALAMAT PASIEN'], 30) || '-')}</td>
                     <td>${record['TANGGAL MASUK RS'] || '-'}</td>
                     <td>${record['TANGGAL KELUAR RS'] || '-'}</td>
                     <td>${duration !== null ? duration + ' hari' : '-'}</td>
-                    <td>${record['NAMA KELUARGA PENDAMPING'] || '-'}</td>
+                    <td>${escapeHtml(record['NAMA KELUARGA PENDAMPING'] || '-')}</td>
                     <td>
                         <div class="driver-info">
-                            <span class="driver-name">${driverName}</span>
-                            ${plate ? `<span class="driver-plate">${plate}</span>` : ''}
+                            <span class="driver-name">${escapeHtml(driverName)}</span>
+                            ${plate ? `<span class="driver-plate">${escapeHtml(plate)}</span>` : ''}
                         </div>
                     </td>
                     <td>
@@ -32576,6 +32400,11 @@
                 charts.time.data.datasets[0].data = timeData.values;
                 charts.time.update();
             }
+        }
+
+        function escapeHtml(str) {
+            if (!str) return '';
+            return str.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
         }
 
         function truncate(str, maxLen) {
