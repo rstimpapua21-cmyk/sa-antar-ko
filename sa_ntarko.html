@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net https://cdnjs.cloudflare.com; style-src 'self' 'unsafe-inline' https://cdnjs.cloudflare.com; img-src 'self' data: https:; connect-src 'self' https://docs.google.com; font-src https://cdnjs.cloudflare.com;">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net https://cdnjs.cloudflare.com; style-src 'self' 'unsafe-inline' https://cdnjs.cloudflare.com; img-src 'self' data: https:; connect-src 'self' https://docs.google.com https://*.googleusercontent.com https://cdn.jsdelivr.net; font-src 'self' https://cdnjs.cloudflare.com;">
     <title>Dashboard Sa Antar Ko - Sistem Monitoring Pasien Pulang</title>
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js" integrity="sha384-e6nUZLBkQ86NJ6TVVKAeSaK8jWa3NhkYWZFomE39AvDbQWeie9PlQqM3pmYW5d1g" crossorigin="anonymous"></script>
     <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels@2.2.0/dist/chartjs-plugin-datalabels.min.js" integrity="sha384-y49Zu59jZHJL/PLKgZPv3k2WI9c0Yp3pWB76V8OBVCb0QBKS8l4Ff3YslzHVX76Y" crossorigin="anonymous"></script>
@@ -31214,8 +31214,36 @@
             }
         }
 
+        function isValidCSV(text) {
+            if (!text || text.length < 50) return false;
+            if (text.trim().startsWith('<') || text.trim().startsWith('{')) return false;
+            const firstLine = text.split(/\r?\n/)[0];
+            if (!firstLine || firstLine.split(',').length < 3) return false;
+            return true;
+        }
+
         async function fetchData() {
-            // PRIORITY 1: Use embedded data (most reliable, no CORS issues)
+            // PRIORITY 1: Try live Google Sheets fetch (real-time data)
+            const csvUrl = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vSv31iXfAkwY8c6Tsi9MvvT1ABR8hxQlI-3rmTCYC9z98D4NklxzocQD2o5AmBvjE25qxYMsQTY36qE/pub?gid=965791667&single=true&output=csv';
+
+            try {
+                const response = await fetch(csvUrl, { mode: 'cors' });
+                if (response.ok) {
+                    const csvText = await response.text();
+                    if (isValidCSV(csvText)) {
+                        allData = parseCSV(csvText);
+                        if (allData.length > 0) {
+                            filteredData = [...allData];
+                            console.log(`✓ Fetched ${allData.length} live records from Google Sheets`);
+                            return;
+                        }
+                    }
+                }
+            } catch (error) {
+                console.warn('[SKM] Live fetch failed:', error.message);
+            }
+
+            // PRIORITY 2: Use embedded data (fallback, updated every 2h by auto-sync)
             if (typeof EMBEDDED_DATA !== 'undefined' && EMBEDDED_DATA.length > 0) {
                 allData = EMBEDDED_DATA.map(record => {
                     const trimmed = {};
@@ -31225,32 +31253,8 @@
                     return trimmed;
                 });
                 filteredData = [...allData];
-                console.log(`✓ Using ${allData.length} embedded records`);
+                console.log(`✓ Using ${allData.length} embedded records (fallback)`);
                 return;
-            }
-            
-            // PRIORITY 2: Try to fetch from Google Sheets (requires web server)
-            const csvUrl = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vSv31iXfAkwY8c6Tsi9MvvT1ABR8hxQlI-3rmTCYC9z98D4NklxzocQD2o5AmBvjE25qxYMsQTY36qE/pub?gid=965791667&single=true&output=csv';
-            
-            try {
-                const response = await fetch(csvUrl);
-                
-                if (!response.ok) {
-                    throw new Error(`HTTP error! status: ${response.status}`);
-                }
-                
-                const csvText = await response.text();
-                
-                if (csvText.length < 100 || !csvText.includes(',')) {
-                    throw new Error('Invalid CSV response');
-                }
-                
-                allData = parseCSV(csvText);
-                filteredData = [...allData];
-                console.log(`✓ Fetched ${allData.length} records from Google Sheets`);
-                return;
-            } catch (error) {
-                console.warn('Direct fetch failed:', error.message);
             }
 
             // All methods failed
