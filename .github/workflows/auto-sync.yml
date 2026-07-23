@@ -1,14 +1,13 @@
-name: 🔄 Auto Sync Dashboard Data
+name: 🔄 Auto Sync Dashboard
 
 on:
   schedule:
-    - cron: '0 */2 * * *'  # Every 2 hours
-  workflow_dispatch:
+    - cron: '*/30 * * * *'  # Setiap 30 menit
+  workflow_dispatch:        # Bisa trigger manual
   push:
-    branches: [main]
     paths:
       - 'sync_data.py'
-      - '.github/workflows/auto-sync.yml'
+      - 'sa_ntarko.html'
 
 permissions:
   contents: write
@@ -17,30 +16,31 @@ jobs:
   sync-data:
     runs-on: ubuntu-latest
     timeout-minutes: 10
-
+    
     steps:
       - name: 📥 Checkout Repository
         uses: actions/checkout@v4
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
           fetch-depth: 0
-
+      
       - name: 🐍 Setup Python
         uses: actions/setup-python@v5
         with:
           python-version: '3.11'
-
+      
       - name: 📦 Install Dependencies
         run: |
           python -m pip install --upgrade pip
           pip install requests
-
+      
       - name: 🔄 Sync Data dari Google Sheets
         id: sync
         run: |
           echo "🚀 Memulai sync data..."
           python sync_data.py
-
+          
+          # Cek apakah ada perubahan
           if git diff --quiet sa_ntarko.html; then
             echo "changed=false" >> $GITHUB_OUTPUT
             echo "📊 Tidak ada perubahan data"
@@ -48,7 +48,7 @@ jobs:
             echo "changed=true" >> $GITHUB_OUTPUT
             echo "✅ Data berhasil diupdate"
           fi
-
+      
       - name: 💾 Commit dan Push Perubahan
         if: steps.sync.outputs.changed == 'true'
         run: |
@@ -58,11 +58,37 @@ jobs:
           TIMESTAMP=$(TZ='Asia/Jayapura' date '+%Y-%m-%d %H:%M:%S WIT')
           git commit -m "🔄 Auto-sync data: $TIMESTAMP"
           git push origin main
-
-      - name: 📊 Report Status
+          echo "✅ Push berhasil pada $TIMESTAMP"
+      
+      - name: 📱 Notifikasi Telegram (Optional)
         if: always()
         run: |
-          echo "========================================"
-          echo "Sync completed at: $(TZ='Asia/Jayapura' date '+%Y-%m-%d %H:%M:%S WIT')"
-          echo "Changed: ${{ steps.sync.outputs.changed }}"
-          echo "========================================"
+          if [ -z "${{ secrets.TELEGRAM_BOT_TOKEN }}" ] || [ -z "${{ secrets.TELEGRAM_CHAT_ID }}" ]; then
+            echo "ℹ️ Telegram secrets tidak di-set, skip notifikasi"
+            exit 0
+          fi
+          
+          if [ "${{ job.status }}" == "success" ]; then
+            if [ "${{ steps.sync.outputs.changed }}" == "true" ]; then
+              STATUS="✅ Data Berhasil Diupdate"
+              EMOJI="🎉"
+            else
+              STATUS="ℹ️ Tidak Ada Perubahan"
+              EMOJI="📊"
+            fi
+          else
+            STATUS="❌ Sync Gagal!"
+            EMOJI="🚨"
+          fi
+          
+          MESSAGE="${EMOJI} *Dashboard Auto-Sync*
+          
+          ${STATUS}
+          
+          📅 Waktu: $(TZ='Asia/Jayapura' date '+%d-%m-%Y %H:%M WIT')
+          🔗 [Dashboard](https://rstimpapua21-cmyk.github.io/sa-antar-ko/sa_ntarko.html)"
+          
+          curl -s -X POST "https://api.telegram.org/bot${{ secrets.TELEGRAM_BOT_TOKEN }}/sendMessage" \
+            -d chat_id="${{ secrets.TELEGRAM_CHAT_ID }}" \
+            -d text="$MESSAGE" \
+            -d parse_mode="Markdown" || echo "⚠️ Gagal kirim notifikasi"
